@@ -2,6 +2,12 @@
 
 A minimalist, customizable Lovelace weather card for Home Assistant featuring custom pastel SVG icons, dynamic weather & day/night pastel backgrounds, a 100% transparent mode, support for custom sensors, and clean horizontal or vertical layouts built for Home Assistant **Sections**.
 
+## Screenshots
+
+![Simple Pastel Weather Card - Vertical and Horizontal Dynamic Pastel Layouts](images/preview-dynamic-pastel.jpg)
+
+![Simple Pastel Weather Card - Horizontal Layout with 3 Custom Stat Slots](images/preview-horizontal-stats.png)
+
 ## Features
 
 - **Flexible data sources:** Use a `weather.*` entity (with optional sensor overrides for temperature or condition) or build a sensor-only weather card with no `weather.*` entity required.
