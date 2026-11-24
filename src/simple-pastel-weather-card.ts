@@ -4,6 +4,7 @@ import {
   ForecastSubscriptionManager,
   computeAdaptiveForecastCount,
   formatForecastLabel,
+  resolveForecastItems,
 } from './forecast';
 import {
   ActionGestureController,
@@ -44,6 +45,8 @@ export class SimplePastelWeatherCard extends LitElement implements LovelaceCard 
   @state() private _forecastError = false;
   @state() private _containerWidth = 480;
   @state() private _containerHeight = 120;
+  @state() private _canScrollPrev = false;
+  @state() private _canScrollNext = false;
 
   private _forecastManager = new ForecastSubscriptionManager();
   private _gestureController = new ActionGestureController();
@@ -110,6 +113,14 @@ export class SimplePastelWeatherCard extends LitElement implements LovelaceCard 
     if (changedProps.has('_config') || changedProps.has('hass')) {
       void this._syncForecastSubscription();
     }
+    if (
+      changedProps.has('_forecast') ||
+      changedProps.has('_containerWidth') ||
+      changedProps.has('_containerHeight') ||
+      changedProps.has('_config')
+    ) {
+      requestAnimationFrame(() => this._updateScrollButtons());
+    }
   }
 
   private _setupResizeObserver(): void {
@@ -169,19 +180,23 @@ export class SimplePastelWeatherCard extends LitElement implements LovelaceCard 
     return localize(key, this._lang);
   }
 
-  private _isEventFromInteractiveStat(ev: Event): boolean {
+  private _isEventFromInteractiveChild(ev: Event): boolean {
     const path = ev.composedPath?.() ?? [];
     for (const node of path) {
-      if (
-        node instanceof Element &&
-        node.classList?.contains('stat-item') &&
-        node.classList?.contains('interactive')
-      ) {
-        return true;
+      if (node instanceof Element) {
+        if (
+          (node.classList?.contains('stat-item') && node.classList?.contains('interactive')) ||
+          node.classList?.contains('forecast-nav-btn') ||
+          node.classList?.contains('forecast-scroller')
+        ) {
+          return true;
+        }
       }
     }
     const target = ev.target as Element | null;
-    return Boolean(target?.closest?.('.stat-item.interactive'));
+    return Boolean(
+      target?.closest?.('.stat-item.interactive, .forecast-nav-btn, .forecast-scroller')
+    );
   }
 
   private _handleCardAction = (action: ActionTrigger): void => {
@@ -190,19 +205,19 @@ export class SimplePastelWeatherCard extends LitElement implements LovelaceCard 
   };
 
   private _onCardPointerDown = (ev: PointerEvent): void => {
-    if (this._isEventFromInteractiveStat(ev)) return;
+    if (this._isEventFromInteractiveChild(ev)) return;
     const actionConfig = resolveCardActionConfig(this._config);
     if (!hasAnyAction(actionConfig)) return;
     this._gestureController.handlePointerDown(ev, 'card', actionConfig, this._handleCardAction);
   };
 
   private _onCardPointerMove = (ev: PointerEvent): void => {
-    if (this._isEventFromInteractiveStat(ev)) return;
+    if (this._isEventFromInteractiveChild(ev)) return;
     this._gestureController.handlePointerMove(ev, 'card');
   };
 
   private _onCardPointerUp = (ev: PointerEvent): void => {
-    if (this._isEventFromInteractiveStat(ev)) return;
+    if (this._isEventFromInteractiveChild(ev)) return;
     const actionConfig = resolveCardActionConfig(this._config);
     if (!hasAnyAction(actionConfig)) return;
     this._gestureController.handlePointerUp(ev, 'card', actionConfig, this._handleCardAction);
@@ -213,13 +228,13 @@ export class SimplePastelWeatherCard extends LitElement implements LovelaceCard 
   };
 
   private _onCardContextMenu = (ev: Event): void => {
-    if (this._isEventFromInteractiveStat(ev)) return;
+    if (this._isEventFromInteractiveChild(ev)) return;
     const actionConfig = resolveCardActionConfig(this._config);
     this._gestureController.handleContextMenu(ev, 'card', actionConfig);
   };
 
   private _onCardKeyDown = (ev: KeyboardEvent): void => {
-    if (this._isEventFromInteractiveStat(ev)) return;
+    if (this._isEventFromInteractiveChild(ev)) return;
     if (ev.key !== 'Enter' && ev.key !== ' ') return;
     const actionConfig = resolveCardActionConfig(this._config);
     if (!hasAnyAction(actionConfig)) return;
@@ -291,6 +306,103 @@ export class SimplePastelWeatherCard extends LitElement implements LovelaceCard 
     `;
   }
 
+  private _updateScrollButtons = (): void => {
+    const scroller = this.shadowRoot?.querySelector('.forecast-scroller') as HTMLElement | null;
+    if (!scroller) {
+      this._canScrollPrev = false;
+      this._canScrollNext = false;
+      return;
+    }
+    const maxScroll = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
+    this._canScrollPrev = scroller.scrollLeft > 2;
+    this._canScrollNext = scroller.scrollLeft < maxScroll - 2;
+  };
+
+  private _scrollForecast(direction: -1 | 1): void {
+    const scroller = this.shadowRoot?.querySelector('.forecast-scroller') as HTMLElement | null;
+    if (!scroller) return;
+    const step = Math.max(scroller.clientWidth * 0.85, 64);
+    scroller.scrollBy({ left: direction * step, behavior: 'smooth' });
+  }
+
+  private _stopInteractionPropagation = (ev: Event): void => {
+    ev.stopPropagation();
+  };
+
+  private _renderForecastCard(
+    item: ForecastEntry,
+    forecastType: 'daily' | 'hourly',
+    variant: 'horizontal' | 'vertical-card'
+  ): TemplateResult {
+    const cond = item.condition?.trim().toLowerCase();
+    const iconCond: IconCondition = isValidWeatherCondition(cond) ? cond : 'unknown';
+    const itemIsNight = item.is_daytime === false || iconCond === 'clear-night';
+    const label = formatForecastLabel(item, forecastType, this._lang);
+    const high =
+      typeof item.temperature === 'number' && Number.isFinite(item.temperature)
+        ? `${Math.round(item.temperature)}°`
+        : '—';
+    const low =
+      typeof item.templow === 'number' && Number.isFinite(item.templow)
+        ? `${Math.round(item.templow)}°`
+        : undefined;
+    const precipProb =
+      forecastType === 'hourly' &&
+      low === undefined &&
+      typeof item.precipitation_probability === 'number' &&
+      item.precipitation_probability > 0
+        ? `${Math.round(item.precipitation_probability)}%`
+        : undefined;
+
+    return html`
+      <div class="forecast-item ${variant}">
+        <span class="forecast-label">${label}</span>
+        <div class="forecast-icon-wrap">
+          ${renderWeatherIcon(
+            iconCond,
+            itemIsNight,
+            'forecast-svg',
+            this._t(`conditions.${iconCond}`)
+          )}
+        </div>
+        <div class="forecast-temps">
+          <span class="forecast-high">${high}</span>
+          ${low !== undefined
+            ? html`<span class="forecast-low">${low}</span>`
+            : precipProb !== undefined
+              ? html`<span class="forecast-low">${precipProb}</span>`
+              : nothing}
+        </div>
+      </div>
+    `;
+  }
+
+  private _renderNavArrow(direction: -1 | 1, visible: boolean): TemplateResult {
+    const isPrev = direction === -1;
+    return html`
+      <button
+        type="button"
+        class="forecast-nav-btn ${isPrev ? 'prev' : 'next'} ${visible ? 'visible' : 'hidden'}"
+        aria-label=${isPrev ? '<' : '>'}
+        tabindex=${visible ? '0' : '-1'}
+        ?disabled=${!visible}
+        @pointerdown=${this._stopInteractionPropagation}
+        @pointermove=${this._stopInteractionPropagation}
+        @pointerup=${this._stopInteractionPropagation}
+        @pointercancel=${this._stopInteractionPropagation}
+        @click=${(ev: Event) => {
+          ev.stopPropagation();
+          this._scrollForecast(direction);
+        }}
+        @keydown=${(ev: KeyboardEvent) => {
+          ev.stopPropagation();
+        }}
+      >
+        ${isPrev ? '‹' : '›'}
+      </button>
+    `;
+  }
+
   private _renderForecastSection(
     data: ResolvedWeatherData,
     orientation: Orientation
@@ -318,60 +430,85 @@ export class SimplePastelWeatherCard extends LitElement implements LovelaceCard 
     }
 
     const forecastType = this._config.forecast_type ?? 'daily';
-    const visibleCount = computeAdaptiveForecastCount(
-      this._containerWidth,
-      this._containerHeight,
-      orientation,
+    const items = resolveForecastItems(
+      this._forecast,
+      forecastType,
       this._config.forecast_items
     );
-    const items = this._forecast.slice(0, visibleCount);
+    if (items.length === 0) {
+      return nothing;
+    }
+
+    if (orientation === 'horizontal') {
+      const slotsPerView = Math.min(
+        items.length,
+        computeAdaptiveForecastCount(
+          this._containerWidth,
+          this._containerHeight,
+          'horizontal',
+          this._config.forecast_items
+        )
+      );
+      const hasOverflow = items.length > slotsPerView;
+
+      return html`
+        <div class="forecast-carousel">
+          ${hasOverflow ? this._renderNavArrow(-1, this._canScrollPrev) : nothing}
+          <div
+            class="forecast-scroller horizontal"
+            style=${`--spwc-slots: ${slotsPerView};`}
+            @scroll=${this._updateScrollButtons}
+            @pointerdown=${this._stopInteractionPropagation}
+            @pointermove=${this._stopInteractionPropagation}
+            @pointerup=${this._stopInteractionPropagation}
+            @pointercancel=${this._stopInteractionPropagation}
+            @click=${this._stopInteractionPropagation}
+          >
+            ${items.map((item) => this._renderForecastCard(item, forecastType, 'horizontal'))}
+          </div>
+          ${hasOverflow ? this._renderNavArrow(1, this._canScrollNext) : nothing}
+        </div>
+      `;
+    }
+
+    // Vertical orientation: 2-column grid matching horizontal pastel card blocks,
+    // paged in 2x2 horizontal slides if more than 4 items are configured.
+    if (items.length <= 4) {
+      return html`
+        <div class="forecast-grid-2col">
+          ${items.map((item) => this._renderForecastCard(item, forecastType, 'vertical-card'))}
+        </div>
+      `;
+    }
+
+    const pages: ForecastEntry[][] = [];
+    for (let i = 0; i < items.length; i += 4) {
+      pages.push(items.slice(i, i + 4));
+    }
 
     return html`
-      <div class="forecast-list ${orientation}">
-        ${items.map((item) => {
-          const cond = item.condition?.trim().toLowerCase();
-          const iconCond: IconCondition = isValidWeatherCondition(cond) ? cond : 'unknown';
-          const itemIsNight =
-            item.is_daytime === false || iconCond === 'clear-night';
-          const label = formatForecastLabel(item, forecastType, this._lang);
-          const high =
-            typeof item.temperature === 'number' && Number.isFinite(item.temperature)
-              ? `${Math.round(item.temperature)}°`
-              : '—';
-          const low =
-            typeof item.templow === 'number' && Number.isFinite(item.templow)
-              ? `${Math.round(item.templow)}°`
-              : undefined;
-          const precipProb =
-            forecastType === 'hourly' &&
-            low === undefined &&
-            typeof item.precipitation_probability === 'number' &&
-            item.precipitation_probability > 0
-              ? `${Math.round(item.precipitation_probability)}%`
-              : undefined;
-
-          return html`
-            <div class="forecast-item ${orientation}">
-              <span class="forecast-label">${label}</span>
-              <div class="forecast-icon-wrap">
-                ${renderWeatherIcon(
-                  iconCond,
-                  itemIsNight,
-                  'forecast-svg',
-                  this._t(`conditions.${iconCond}`)
+      <div class="forecast-carousel vertical-carousel">
+        ${this._renderNavArrow(-1, this._canScrollPrev)}
+        <div
+          class="forecast-scroller vertical-pages"
+          @scroll=${this._updateScrollButtons}
+          @pointerdown=${this._stopInteractionPropagation}
+          @pointermove=${this._stopInteractionPropagation}
+          @pointerup=${this._stopInteractionPropagation}
+          @pointercancel=${this._stopInteractionPropagation}
+          @click=${this._stopInteractionPropagation}
+        >
+          ${pages.map(
+            (page) => html`
+              <div class="forecast-page">
+                ${page.map((item) =>
+                  this._renderForecastCard(item, forecastType, 'vertical-card')
                 )}
               </div>
-              <div class="forecast-temps">
-                <span class="forecast-high">${high}</span>
-                ${low !== undefined
-                  ? html`<span class="forecast-low">${low}</span>`
-                  : precipProb !== undefined
-                    ? html`<span class="forecast-low">${precipProb}</span>`
-                    : nothing}
-              </div>
-            </div>
-          `;
-        })}
+            `
+          )}
+        </div>
+        ${this._renderNavArrow(1, this._canScrollNext)}
       </div>
     `;
   }
@@ -442,21 +579,22 @@ export class SimplePastelWeatherCard extends LitElement implements LovelaceCard 
       `;
     }
 
-    // Horizontal with forecast (4x2+ visual units)
+    // Horizontal with forecast (4x2+ visual units): always keep side-by-side layout
+    const isCompactSide = this._containerWidth < 440;
     return html`
-      <div class="layout-horizontal with-forecast ${this._containerWidth < 430 ? 'stacked' : ''}">
+      <div class="layout-horizontal with-forecast ${isCompactSide ? 'compact-side' : ''}">
         <div class="current-pane">
           <div class="hero-row">
             ${showIcon
               ? html`
-                  <div class="hero-icon-wrap">
+                  <div class="hero-icon-wrap ${isCompactSide ? 'compact' : ''}">
                     ${renderWeatherIcon(iconCond, data.isNight, 'hero-svg', conditionText)}
                   </div>
                 `
               : nothing}
             <div class="hero-primary">
               ${showTemperature && tempText !== nothing
-                ? html`<div class="temperature">${tempText}</div>`
+                ? html`<div class="temperature ${isCompactSide ? 'compact' : ''}">${tempText}</div>`
                 : nothing}
               ${showCondition && conditionText
                 ? html`<div class="condition-text">${conditionText}</div>`
@@ -474,7 +612,7 @@ export class SimplePastelWeatherCard extends LitElement implements LovelaceCard 
               `
             : nothing}
         </div>
-        <div class="section-divider ${this._containerWidth < 430 ? 'horizontal' : 'vertical'}"></div>
+        <div class="section-divider vertical"></div>
         <div class="forecast-pane">${this._renderForecastSection(data, 'horizontal')}</div>
       </div>
     `;
@@ -594,9 +732,14 @@ export class SimplePastelWeatherCard extends LitElement implements LovelaceCard 
     const cardActionConfig = resolveCardActionConfig(this._config);
     const cardInteractive = hasAnyAction(cardActionConfig);
 
+    const isCompactHorizontalForecast =
+      orientation === 'horizontal' &&
+      Boolean(this._config.show_forecast) &&
+      this._containerWidth < 440;
+
     return html`
       <ha-card
-        class="spwc-card ${this._config.background_mode ?? 'dynamic'} ${cardInteractive ? 'interactive' : ''}"
+        class="spwc-card ${this._config.background_mode ?? 'dynamic'} ${cardInteractive ? 'interactive' : ''} ${isCompactHorizontalForecast ? 'compact-horizontal-forecast' : ''}"
         style=${themeStyle}
         role=${cardInteractive ? 'button' : nothing}
         tabindex=${cardInteractive ? '0' : nothing}
@@ -650,6 +793,10 @@ export class SimplePastelWeatherCard extends LitElement implements LovelaceCard 
       background: transparent;
       border: none;
       box-shadow: none;
+    }
+
+    .spwc-card.compact-horizontal-forecast {
+      padding: 8px 10px;
     }
 
     .spwc-card.interactive {
@@ -871,9 +1018,25 @@ export class SimplePastelWeatherCard extends LitElement implements LovelaceCard 
       min-width: 0;
     }
 
-    .layout-horizontal.with-forecast.stacked {
-      flex-direction: column;
+    .layout-horizontal.with-forecast.compact-side {
       gap: 8px;
+    }
+
+    .layout-horizontal.with-forecast.compact-side .current-pane {
+      gap: 5px;
+      max-width: 44%;
+    }
+
+    .layout-horizontal.with-forecast.compact-side .hero-row {
+      gap: 6px;
+    }
+
+    .layout-horizontal.with-forecast.compact-side .condition-text {
+      font-size: 0.76rem;
+    }
+
+    .layout-horizontal.with-forecast.compact-side .location-text {
+      font-size: 0.68rem;
     }
 
     .current-pane {
@@ -909,8 +1072,10 @@ export class SimplePastelWeatherCard extends LitElement implements LovelaceCard 
 
     .forecast-pane.vertical {
       width: 100%;
+      flex: 1 1 0;
+      min-height: 0;
       align-items: stretch;
-      justify-content: center;
+      justify-content: stretch;
     }
 
     .forecast-empty {
@@ -921,25 +1086,97 @@ export class SimplePastelWeatherCard extends LitElement implements LovelaceCard 
       padding: 4px 6px;
     }
 
-    .forecast-list.horizontal {
+    .forecast-carousel {
+      position: relative;
       display: flex;
-      align-items: stretch;
-      justify-content: space-evenly;
-      gap: 6px;
+      align-items: center;
       width: 100%;
+      height: 100%;
+      min-width: 0;
     }
 
-    .forecast-item.horizontal {
+    .forecast-scroller {
+      display: flex;
+      overflow-x: auto;
+      scroll-snap-type: x mandatory;
+      scroll-behavior: smooth;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+      width: 100%;
+      min-width: 0;
+      touch-action: pan-x;
+    }
+
+    .forecast-scroller::-webkit-scrollbar {
+      display: none;
+    }
+
+    .forecast-scroller.horizontal {
+      align-items: stretch;
+      gap: var(--spwc-forecast-gap, 6px);
+      height: 100%;
+    }
+
+    .forecast-item {
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
       gap: 4px;
-      flex: 1 1 0;
-      min-width: 46px;
       padding: 6px 4px;
       border-radius: 12px;
       background: var(--spwc-forecast-bg);
+      box-sizing: border-box;
+      min-width: 0;
+    }
+
+    .forecast-item.horizontal {
+      flex: 0 0 calc((100% - (var(--spwc-slots, 3) - 1) * var(--spwc-forecast-gap, 6px)) / var(--spwc-slots, 3));
+      scroll-snap-align: start;
+    }
+
+    .forecast-nav-btn {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      z-index: 2;
+      width: 22px;
+      height: 22px;
+      padding: 0;
+      border-radius: 999px;
+      border: 1px solid var(--spwc-chip-border);
+      background: var(--spwc-chip-bg);
+      color: var(--spwc-text);
+      backdrop-filter: blur(4px);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      line-height: 1;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.18s ease, transform 0.15s ease;
+    }
+
+    .forecast-nav-btn.prev {
+      left: 2px;
+    }
+
+    .forecast-nav-btn.next {
+      right: 2px;
+    }
+
+    .forecast-nav-btn.visible {
+      opacity: 0.88;
+    }
+
+    .forecast-nav-btn.visible:hover {
+      opacity: 1;
+    }
+
+    .forecast-nav-btn.hidden {
+      opacity: 0;
+      pointer-events: none;
     }
 
     .forecast-icon-wrap {
@@ -1026,7 +1263,6 @@ export class SimplePastelWeatherCard extends LitElement implements LovelaceCard 
     .layout-vertical.with-forecast {
       display: flex;
       flex-direction: column;
-      justify-content: space-between;
       gap: 8px;
       height: 100%;
       width: 100%;
@@ -1038,6 +1274,7 @@ export class SimplePastelWeatherCard extends LitElement implements LovelaceCard 
       flex-direction: column;
       gap: 6px;
       width: 100%;
+      flex: 0 0 auto;
     }
 
     .vertical-summary-top {
@@ -1055,33 +1292,48 @@ export class SimplePastelWeatherCard extends LitElement implements LovelaceCard 
       gap: 1px;
     }
 
-    .forecast-list.vertical {
-      display: flex;
-      flex-direction: column;
-      justify-content: space-evenly;
-      gap: 4px;
-      width: 100%;
-    }
-
-    .forecast-item.vertical {
+    .forecast-grid-2col {
       display: grid;
-      grid-template-columns: minmax(42px, 1fr) 24px auto;
-      align-items: center;
-      gap: 8px;
-      padding: 3px 8px;
-      border-radius: 10px;
-      background: var(--spwc-forecast-bg);
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-auto-rows: 1fr;
+      gap: 6px;
+      width: 100%;
+      height: 100%;
+      min-height: 0;
     }
 
-    .forecast-item.vertical .forecast-icon-wrap {
+    .forecast-scroller.vertical-pages {
+      align-items: stretch;
+      gap: 8px;
+      height: 100%;
+    }
+
+    .forecast-page {
+      flex: 0 0 100%;
+      scroll-snap-align: start;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-rows: repeat(2, minmax(0, 1fr));
+      gap: 6px;
+      height: 100%;
+      box-sizing: border-box;
+    }
+
+    .forecast-item.vertical-card {
+      gap: 2px;
+      padding: 6px 4px;
+      height: 100%;
+    }
+
+    .forecast-item.vertical-card .forecast-icon-wrap {
       width: 22px;
       height: 22px;
     }
 
-    .forecast-item.vertical .forecast-temps {
+    .forecast-item.vertical-card .forecast-temps {
       flex-direction: row;
-      gap: 6px;
-      justify-content: flex-end;
+      gap: 5px;
+      align-items: baseline;
     }
   `;
 }

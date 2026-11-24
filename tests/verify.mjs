@@ -180,6 +180,19 @@ async function runTests() {
       assert.equal(forecastMod.computeAdaptiveForecastCount(270, 270, 'vertical', 2), 2);
     });
 
+    await check('resolveForecastItems preserves configured items > 3 and applies daily/hourly defaults', () => {
+      const sampleForecast = Array.from({ length: 14 }, (_, idx) => ({
+        datetime: `2026-11-${String(idx + 1).padStart(2, '0')}`,
+        condition: 'sunny',
+        temperature: 25 + idx,
+      }));
+      assert.equal(forecastMod.resolveForecastItems(sampleForecast, 'daily').length, 7);
+      assert.equal(forecastMod.resolveForecastItems(sampleForecast, 'hourly').length, 12);
+      assert.equal(forecastMod.resolveForecastItems(sampleForecast, 'daily', 5).length, 5);
+      assert.equal(forecastMod.resolveForecastItems(sampleForecast, 'daily', 10).length, 10);
+      assert.deepEqual(forecastMod.resolveForecastItems([], 'daily', 5), []);
+    });
+
     await check('ForecastSubscriptionManager subscribes cleanly and prevents leaked subscriptions on early destroy', async () => {
       const manager = new forecastMod.ForecastSubscriptionManager();
       let unsubCalls = 0;
@@ -341,6 +354,16 @@ async function runTests() {
       assert.ok(iconsMod.renderWeatherIcon('unknown', true));
       assert.ok(iconsSource.includes("'thermometer'"));
       assert.ok(!/svg`[^`]*<svg\b/i.test(iconsSource), 'Nested svg`<svg>` is forbidden in Lit');
+    });
+
+    await check('card keeps side-by-side horizontal forecast layout and isolates carousel/nav interactions', () => {
+      const cardSource = readFileSync(join(ROOT, 'src/simple-pastel-weather-card.ts'), 'utf8');
+      assert.ok(!cardSource.includes('.layout-horizontal.with-forecast.stacked'));
+      assert.ok(cardSource.includes('.forecast-nav-btn'));
+      assert.ok(cardSource.includes('.forecast-scroller'));
+      assert.ok(cardSource.includes('_stopInteractionPropagation'));
+      assert.ok(cardSource.includes('_isEventFromInteractiveChild'));
+      assert.ok(cardSource.includes('forecast-grid-2col'));
     });
 
     console.log(`\nAll ${passed} checks passed!`);

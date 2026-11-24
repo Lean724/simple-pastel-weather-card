@@ -53,7 +53,25 @@ export function formatForecastLabel(
 }
 
 /**
- * Computes how many forecast items fit cleanly inside the measured container dimensions.
+ * Selects the total list of forecast entries to expose in the carousel/grid
+ * without truncating to the currently visible viewport width.
+ */
+export function resolveForecastItems(
+  items: ForecastEntry[],
+  forecastType: ForecastType,
+  configuredMax?: number
+): ForecastEntry[] {
+  if (!Array.isArray(items) || items.length === 0) return [];
+  const defaultLimit = forecastType === 'hourly' ? 12 : 7;
+  const limit =
+    typeof configuredMax === 'number' && Number.isFinite(configuredMax) && configuredMax > 0
+      ? Math.max(1, Math.floor(configuredMax))
+      : defaultLimit;
+  return items.slice(0, limit);
+}
+
+/**
+ * Computes how many forecast slots fit cleanly per visible viewport page.
  */
 export function computeAdaptiveForecastCount(
   width: number,
@@ -66,14 +84,16 @@ export function computeAdaptiveForecastCount(
 
   let autoCount: number;
   if (orientation === 'horizontal') {
-    const availableWidth = Math.max(120, safeWidth - 210);
-    autoCount = Math.floor(availableWidth / 58);
+    const leftPaneReserve = safeWidth < 440 ? 185 : 210;
+    const minItemWidth = 58;
+    const availableWidth = Math.max(110, safeWidth - leftPaneReserve);
+    autoCount = Math.floor(availableWidth / minItemWidth);
   } else {
     const availableHeight = Math.max(70, safeHeight - 132);
     autoCount = Math.floor(availableHeight / 32);
   }
 
-  const clampedAuto = Math.max(2, Math.min(7, autoCount));
+  const clampedAuto = Math.max(2, Math.min(5, autoCount));
   if (typeof configuredMax === 'number' && Number.isFinite(configuredMax) && configuredMax > 0) {
     return Math.max(1, Math.min(Math.floor(configuredMax), clampedAuto));
   }
