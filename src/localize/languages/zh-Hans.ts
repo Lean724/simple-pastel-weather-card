@@ -8,6 +8,8 @@ export const zhHans: TranslationSchema = {
     sensor_only_no_forecast: '天气预报需要配置 weather 实体',
     forecast_loading: '正在加载预报...',
     forecast_error: '预报不可用',
+    weather_title: '天气',
+    today: '今天',
   },
   conditions: {
     sunny: '晴朗',

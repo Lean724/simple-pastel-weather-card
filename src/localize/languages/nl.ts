@@ -8,6 +8,8 @@ export const nl: TranslationSchema = {
     sensor_only_no_forecast: 'Voorspelling vereist een weather-entiteit',
     forecast_loading: 'Voorspelling laden...',
     forecast_error: 'Voorspelling niet beschikbaar',
+    weather_title: 'Weer',
+    today: 'Vandaag',
   },
   conditions: {
     sunny: 'Zonnig',

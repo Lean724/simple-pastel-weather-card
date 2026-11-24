@@ -226,6 +226,8 @@ export interface TranslationSchema {
     sensor_only_no_forecast: string;
     forecast_loading: string;
     forecast_error: string;
+    weather_title: string;
+    today: string;
   };
   conditions: {
     sunny: string;

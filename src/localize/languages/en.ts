@@ -8,6 +8,8 @@ export const en: TranslationSchema = {
     sensor_only_no_forecast: 'Forecast requires a weather entity',
     forecast_loading: 'Loading forecast...',
     forecast_error: 'Forecast unavailable',
+    weather_title: 'Weather',
+    today: 'Today',
   },
   conditions: {
     sunny: 'Sunny',

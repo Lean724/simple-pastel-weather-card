@@ -337,6 +337,7 @@ export class SimplePastelWeatherCard extends LitElement implements LovelaceCard 
     const cond = item.condition?.trim().toLowerCase();
     const iconCond: IconCondition = isValidWeatherCondition(cond) ? cond : 'unknown';
     const itemIsNight = item.is_daytime === false || iconCond === 'clear-night';
+    const condLabel = this._t(`conditions.${iconCond}`);
     const label = formatForecastLabel(item, forecastType, this._lang);
     const high =
       typeof item.temperature === 'number' && Number.isFinite(item.temperature)
@@ -354,16 +355,33 @@ export class SimplePastelWeatherCard extends LitElement implements LovelaceCard 
         ? `${Math.round(item.precipitation_probability)}%`
         : undefined;
 
+    if (variant === 'vertical-row') {
+      return html`
+        <div class="forecast-item vertical-row">
+          <div class="forecast-icon-wrap">
+            ${renderWeatherIcon(iconCond, itemIsNight, 'forecast-svg', condLabel)}
+          </div>
+          <div class="forecast-row-meta">
+            <span class="forecast-label">${label}</span>
+            <span class="forecast-cond">${condLabel}</span>
+          </div>
+          <div class="forecast-temps">
+            <span class="forecast-high">${high}</span>
+            ${low !== undefined
+              ? html`<span class="forecast-sep">/</span><span class="forecast-low">${low}</span>`
+              : precipProb !== undefined
+                ? html`<span class="forecast-low">${precipProb}</span>`
+                : nothing}
+          </div>
+        </div>
+      `;
+    }
+
     return html`
       <div class="forecast-item ${variant}">
         <span class="forecast-label">${label}</span>
         <div class="forecast-icon-wrap">
-          ${renderWeatherIcon(
-            iconCond,
-            itemIsNight,
-            'forecast-svg',
-            this._t(`conditions.${iconCond}`)
-          )}
+          ${renderWeatherIcon(iconCond, itemIsNight, 'forecast-svg', condLabel)}
         </div>
         <div class="forecast-temps">
           <span class="forecast-high">${high}</span>
@@ -647,35 +665,48 @@ export class SimplePastelWeatherCard extends LitElement implements LovelaceCard 
     if (showForecast) {
       return html`
         <div class="layout-vertical with-forecast">
-          <div class="vertical-summary">
-            <div class="vertical-summary-top">
-              ${showIcon
-                ? html`
-                    <div class="hero-icon-wrap medium">
-                      ${renderWeatherIcon(iconCond, data.isNight, 'hero-svg', conditionText)}
-                    </div>
-                  `
-                : nothing}
-              <div class="vertical-summary-info">
-                ${showTemperature && tempText !== nothing
-                  ? html`<div class="temperature medium">${tempText}</div>`
-                  : nothing}
-                ${showCondition && conditionText
-                  ? html`<div class="condition-text">${conditionText}</div>`
-                  : nothing}
-                ${showName && data.name
-                  ? html`<div class="location-text">${data.name}</div>`
-                  : nothing}
-              </div>
-            </div>
-            ${showStats
+          ${showName
+            ? html`
+                <div class="vertical-header">
+                  <span class="vertical-header-title">${this._t('card.weather_title')}</span>
+                  ${data.name
+                    ? html`<span class="vertical-header-name">${data.name}</span>`
+                    : nothing}
+                </div>
+              `
+            : nothing}
+          <div class="vertical-hero-centered">
+            ${showIcon
               ? html`
-                  <div class="stats-row compact centered">
-                    ${data.stats.map((stat) => this._renderStatItem(stat, true))}
+                  <div class="hero-icon-wrap medium">
+                    ${renderWeatherIcon(iconCond, data.isNight, 'hero-svg', conditionText)}
                   </div>
                 `
               : nothing}
+            ${showTemperature && tempText !== nothing
+              ? html`<div class="temperature medium">${tempText}</div>`
+              : nothing}
           </div>
+          ${(showCondition && conditionText) || showStats
+            ? html`
+                <div class="vertical-meta-left">
+                  ${showCondition && conditionText
+                    ? html`
+                        <div class="condition-text today-line">
+                          ${this._t('card.today')}: ${conditionText}
+                        </div>
+                      `
+                    : nothing}
+                  ${showStats
+                    ? html`
+                        <div class="stats-row compact left-aligned">
+                          ${data.stats.map((stat) => this._renderStatItem(stat, true))}
+                        </div>
+                      `
+                    : nothing}
+                </div>
+              `
+            : nothing}
           <div class="section-divider horizontal"></div>
           <div class="forecast-pane vertical">
             ${this._renderForecastSection(data, 'vertical')}
@@ -736,10 +767,12 @@ export class SimplePastelWeatherCard extends LitElement implements LovelaceCard 
       orientation === 'horizontal' &&
       Boolean(this._config.show_forecast) &&
       this._containerWidth < 440;
+    const isVerticalForecast =
+      orientation === 'vertical' && Boolean(this._config.show_forecast);
 
     return html`
       <ha-card
-        class="spwc-card ${this._config.background_mode ?? 'dynamic'} ${cardInteractive ? 'interactive' : ''} ${isCompactHorizontalForecast ? 'compact-horizontal-forecast' : ''}"
+        class="spwc-card ${this._config.background_mode ?? 'dynamic'} ${cardInteractive ? 'interactive' : ''} ${isCompactHorizontalForecast ? 'compact-horizontal-forecast' : ''} ${isVerticalForecast ? 'vertical-forecast-card' : ''}"
         style=${themeStyle}
         role=${cardInteractive ? 'button' : nothing}
         tabindex=${cardInteractive ? '0' : nothing}
@@ -797,6 +830,10 @@ export class SimplePastelWeatherCard extends LitElement implements LovelaceCard 
 
     .spwc-card.compact-horizontal-forecast {
       padding: 8px 10px;
+    }
+
+    .spwc-card.vertical-forecast-card {
+      padding: 8px 12px;
     }
 
     .spwc-card.interactive {
@@ -1263,64 +1300,82 @@ export class SimplePastelWeatherCard extends LitElement implements LovelaceCard 
     .layout-vertical.with-forecast {
       display: flex;
       flex-direction: column;
-      gap: 6px;
+      gap: 4px;
       height: 100%;
       width: 100%;
       min-width: 0;
     }
 
-    .vertical-summary {
+    .vertical-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      width: 100%;
+      font-size: 0.68rem;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--spwc-muted);
+      line-height: 1.1;
+      flex: 0 0 auto;
+    }
+
+    .vertical-header-name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      text-align: right;
+    }
+
+    .vertical-hero-centered {
       display: flex;
       flex-direction: column;
-      gap: 6px;
+      align-items: center;
+      justify-content: center;
+      gap: 2px;
       width: 100%;
       flex: 0 0 auto;
     }
 
-    .layout-vertical.with-forecast .vertical-summary {
-      gap: 4px;
-    }
-
     .layout-vertical.with-forecast .hero-icon-wrap.medium {
-      width: 38px;
-      height: 38px;
+      width: 34px;
+      height: 34px;
     }
 
     .layout-vertical.with-forecast .temperature.medium {
-      font-size: 1.55rem;
+      font-size: 1.5rem;
+      line-height: 1.05;
     }
 
-    .layout-vertical.with-forecast .condition-text {
-      font-size: 0.78rem;
-    }
-
-    .layout-vertical.with-forecast .location-text {
-      font-size: 0.7rem;
-    }
-
-    .vertical-summary-top {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 10px;
-      min-width: 0;
-    }
-
-    .vertical-summary-info {
+    .vertical-meta-left {
       display: flex;
       flex-direction: column;
+      align-items: flex-start;
+      gap: 3px;
+      width: 100%;
       min-width: 0;
-      gap: 1px;
+      flex: 0 0 auto;
+    }
+
+    .today-line {
+      font-size: 0.78rem;
+      font-weight: 500;
+      line-height: 1.15;
+    }
+
+    .stats-row.left-aligned {
+      justify-content: flex-start;
     }
 
     .forecast-rows-4 {
       display: flex;
       flex-direction: column;
-      gap: 4px;
+      gap: 0;
       width: 100%;
       height: 100%;
       min-height: 0;
-      justify-content: center;
+      justify-content: space-between;
     }
 
     .forecast-scroller.vertical-pages {
@@ -1334,36 +1389,71 @@ export class SimplePastelWeatherCard extends LitElement implements LovelaceCard 
       scroll-snap-align: start;
       display: flex;
       flex-direction: column;
-      gap: 4px;
+      gap: 0;
       height: 100%;
       min-height: 0;
-      justify-content: center;
+      justify-content: space-between;
       box-sizing: border-box;
     }
 
     .forecast-item.vertical-row {
       display: grid;
-      grid-template-columns: minmax(38px, 1fr) 22px auto;
+      grid-template-columns: 22px minmax(0, 1fr) auto;
       align-items: center;
       gap: 8px;
-      padding: 0 10px;
-      border-radius: 10px;
-      background: var(--spwc-forecast-bg);
+      padding: 2px 2px;
+      border-radius: 0;
+      background: transparent;
+      border-bottom: 1px solid var(--spwc-divider);
       flex: 1 1 0;
       min-height: 0;
       max-height: 44px;
     }
 
+    .forecast-item.vertical-row:last-child {
+      border-bottom: none;
+    }
+
     .forecast-item.vertical-row .forecast-icon-wrap {
-      width: 20px;
-      height: 20px;
+      width: 22px;
+      height: 22px;
+    }
+
+    .forecast-row-meta {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      gap: 1px;
+    }
+
+    .forecast-item.vertical-row .forecast-label {
+      font-size: 0.72rem;
+      font-weight: 600;
+      color: var(--spwc-text);
+      line-height: 1.05;
+    }
+
+    .forecast-cond {
+      font-size: 0.65rem;
+      color: var(--spwc-muted);
+      line-height: 1.05;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
 
     .forecast-item.vertical-row .forecast-temps {
       flex-direction: row;
-      gap: 6px;
+      gap: 3px;
       align-items: baseline;
       justify-content: flex-end;
+      white-space: nowrap;
+    }
+
+    .forecast-sep {
+      font-size: 0.72rem;
+      color: var(--spwc-muted);
+      opacity: 0.7;
     }
   `;
 }

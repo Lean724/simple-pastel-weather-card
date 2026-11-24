@@ -8,6 +8,8 @@ export const ru: TranslationSchema = {
     sensor_only_no_forecast: 'Для прогноза требуется объект weather',
     forecast_loading: 'Загрузка прогноза...',
     forecast_error: 'Прогноз недоступен',
+    weather_title: 'Погода',
+    today: 'Сегодня',
   },
   conditions: {
     sunny: 'Солнечно',

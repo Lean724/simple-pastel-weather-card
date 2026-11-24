@@ -1,6 +1,6 @@
 {
   "name": "simple-pastel-weather-card",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Minimalist pastel weather card for Home Assistant supporting weather entities, custom sensors, horizontal/vertical layouts, dynamic day/night backgrounds, and transparent mode.",
   "type": "module",
   "main": "dist/simple-pastel-weather-card.js",

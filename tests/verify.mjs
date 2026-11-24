@@ -365,6 +365,10 @@ async function runTests() {
       assert.ok(cardSource.includes('_isEventFromInteractiveChild'));
       assert.ok(cardSource.includes('forecast-rows-4'));
       assert.ok(cardSource.includes('vertical-row'));
+      assert.ok(cardSource.includes('.vertical-header'));
+      assert.ok(cardSource.includes('.forecast-row-meta'));
+      assert.ok(cardSource.includes("card.weather_title"));
+      assert.ok(cardSource.includes("card.today"));
       assert.ok(!cardSource.includes('forecast-grid-2col'));
     });
 
