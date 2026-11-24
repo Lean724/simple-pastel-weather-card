@@ -363,7 +363,9 @@ async function runTests() {
       assert.ok(cardSource.includes('.forecast-scroller'));
       assert.ok(cardSource.includes('_stopInteractionPropagation'));
       assert.ok(cardSource.includes('_isEventFromInteractiveChild'));
-      assert.ok(cardSource.includes('forecast-grid-2col'));
+      assert.ok(cardSource.includes('forecast-rows-4'));
+      assert.ok(cardSource.includes('vertical-row'));
+      assert.ok(!cardSource.includes('forecast-grid-2col'));
     });
 
     console.log(`\nAll ${passed} checks passed!`);

@@ -332,7 +332,7 @@ export class SimplePastelWeatherCard extends LitElement implements LovelaceCard 
   private _renderForecastCard(
     item: ForecastEntry,
     forecastType: 'daily' | 'hourly',
-    variant: 'horizontal' | 'vertical-card'
+    variant: 'horizontal' | 'vertical-row'
   ): TemplateResult {
     const cond = item.condition?.trim().toLowerCase();
     const iconCond: IconCondition = isValidWeatherCondition(cond) ? cond : 'unknown';
@@ -471,12 +471,12 @@ export class SimplePastelWeatherCard extends LitElement implements LovelaceCard 
       `;
     }
 
-    // Vertical orientation: 2-column grid matching horizontal pastel card blocks,
-    // paged in 2x2 horizontal slides if more than 4 items are configured.
+    // Vertical orientation: up to 4 clean horizontal rows per view,
+    // paged in groups of 4 if more than 4 items are configured.
     if (items.length <= 4) {
       return html`
-        <div class="forecast-grid-2col">
-          ${items.map((item) => this._renderForecastCard(item, forecastType, 'vertical-card'))}
+        <div class="forecast-rows-4">
+          ${items.map((item) => this._renderForecastCard(item, forecastType, 'vertical-row'))}
         </div>
       `;
     }
@@ -500,9 +500,9 @@ export class SimplePastelWeatherCard extends LitElement implements LovelaceCard 
         >
           ${pages.map(
             (page) => html`
-              <div class="forecast-page">
+              <div class="forecast-page-rows">
                 ${page.map((item) =>
-                  this._renderForecastCard(item, forecastType, 'vertical-card')
+                  this._renderForecastCard(item, forecastType, 'vertical-row')
                 )}
               </div>
             `
@@ -1263,7 +1263,7 @@ export class SimplePastelWeatherCard extends LitElement implements LovelaceCard 
     .layout-vertical.with-forecast {
       display: flex;
       flex-direction: column;
-      gap: 8px;
+      gap: 6px;
       height: 100%;
       width: 100%;
       min-width: 0;
@@ -1275,6 +1275,27 @@ export class SimplePastelWeatherCard extends LitElement implements LovelaceCard 
       gap: 6px;
       width: 100%;
       flex: 0 0 auto;
+    }
+
+    .layout-vertical.with-forecast .vertical-summary {
+      gap: 4px;
+    }
+
+    .layout-vertical.with-forecast .hero-icon-wrap.medium {
+      width: 38px;
+      height: 38px;
+    }
+
+    .layout-vertical.with-forecast .temperature.medium {
+      font-size: 1.55rem;
+    }
+
+    .layout-vertical.with-forecast .condition-text {
+      font-size: 0.78rem;
+    }
+
+    .layout-vertical.with-forecast .location-text {
+      font-size: 0.7rem;
     }
 
     .vertical-summary-top {
@@ -1292,14 +1313,14 @@ export class SimplePastelWeatherCard extends LitElement implements LovelaceCard 
       gap: 1px;
     }
 
-    .forecast-grid-2col {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      grid-auto-rows: 1fr;
-      gap: 6px;
+    .forecast-rows-4 {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
       width: 100%;
       height: 100%;
       min-height: 0;
+      justify-content: center;
     }
 
     .forecast-scroller.vertical-pages {
@@ -1308,32 +1329,41 @@ export class SimplePastelWeatherCard extends LitElement implements LovelaceCard 
       height: 100%;
     }
 
-    .forecast-page {
+    .forecast-page-rows {
       flex: 0 0 100%;
       scroll-snap-align: start;
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      grid-template-rows: repeat(2, minmax(0, 1fr));
-      gap: 6px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
       height: 100%;
+      min-height: 0;
+      justify-content: center;
       box-sizing: border-box;
     }
 
-    .forecast-item.vertical-card {
-      gap: 2px;
-      padding: 6px 4px;
-      height: 100%;
+    .forecast-item.vertical-row {
+      display: grid;
+      grid-template-columns: minmax(38px, 1fr) 22px auto;
+      align-items: center;
+      gap: 8px;
+      padding: 0 10px;
+      border-radius: 10px;
+      background: var(--spwc-forecast-bg);
+      flex: 1 1 0;
+      min-height: 0;
+      max-height: 44px;
     }
 
-    .forecast-item.vertical-card .forecast-icon-wrap {
-      width: 22px;
-      height: 22px;
+    .forecast-item.vertical-row .forecast-icon-wrap {
+      width: 20px;
+      height: 20px;
     }
 
-    .forecast-item.vertical-card .forecast-temps {
+    .forecast-item.vertical-row .forecast-temps {
       flex-direction: row;
-      gap: 5px;
+      gap: 6px;
       align-items: baseline;
+      justify-content: flex-end;
     }
   `;
 }
